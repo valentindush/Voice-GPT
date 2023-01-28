@@ -20,6 +20,9 @@ const Home = () => {
             {message: 'Hello, How can I help', sender: 'user'},
             {message: 'Uhmmmm', sender: 'bot'},
         ])
+
+
+
     },[])
 
     const [text, setText] = useState('')
@@ -37,15 +40,36 @@ const Home = () => {
         synth.speak(utterance);
     }
 
+    let SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.continuous  = true
+    recognition.interimResults = true
 
     const record = ()=>{
+        setText("")
+        setRecording(true)
+        recognition.start();
+        recognition.onresult = (e:any)=>{
+
+            let text = ""
+
+           for(let i = e.resultIndex; i < e.results.length; i++){
+                text += ` ${e.results[i][0].transcript}`
+           }
+
+           setText(prev=>prev+""+text)
+        }
         
-
     }
 
-    const stopRecording = () =>{
-
+    const stopRecording = async () =>{
+        await recognition.stop()
+        setRecording(false)
     }
+
+
+
 
   return (
     <div className='w-screen h-screen bg-white flex items-center justify-center'>
@@ -72,13 +96,13 @@ const Home = () => {
                 </div>          
 
                 <div className="flex w-full gap-2">
-                    <input value={text} onChange={(e)=>setText(e.target.value)} type="text" placeholder='type message' className="outline-none w-full border text-gray-600 border-gray-400 p-2 rounded-xl" />
+                    <textarea value={text} onChange={(e)=>setText(e.target.value)} type="text" placeholder='type message' className="outline-none w-full border text-gray-600 border-gray-400 p-2 rounded-xl" />
                     <button title='send' className='p-3 w-[40px] h-[40px] rounded-lg bg-gray-600'>
                         {Send}
                     </button>
                     <button title='start recording' className='w-[40px] h-[40px] border-2 rounded-full flex items-center justify-center border-gray-700 p-2 fill-gray-700 border-opacity-70 scale-[.8]'>
                         {!recording && <div onClick={record} className='w-[40px] h-[40px] flex items-center justify-center'>{MicOn}</div>}
-                        {recording && <div onClick={stopRecording} className="animate-pulse w-3 h-3 bg-red-500 rounded-full">stop</div>}
+                        {recording && <div onClick={stopRecording} className="animate-pulse w-3 h-3 bg-red-500 rounded-full"></div>}
                     </button>
                 </div>
             </div>  
