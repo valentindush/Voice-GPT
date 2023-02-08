@@ -2,102 +2,87 @@ import React, { useEffect, useRef, useState } from 'react'
 import { MicOn, Play, Send } from '../../assets/icons'
 import { generateCompletion, getAPIKey } from '../../utils/openAI'
 
-
-
-
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 
 const Home = () => {
 
     const [messages, setMessages] = useState<{ message: string, sender: "bot" | "user" }[]>([])
     const [loading, setLoading] = useState(false)
+    const [text, setText] = useState("")
 
-    const [text, setText] = useState('')
-    const [recording, setRecording] = useState(false)
-
+    const [isRecording, setIsRecording] = useState(false);
+    const [transcript, setTranscript] = useState('');
+    const [recognition, setRecognition] = useState<SpeechRecognition | undefined>(undefined);
     const boxRef = useRef<HTMLDivElement>(null)
 
-    const speak = (text: string) => {
+    useEffect(() => {
+        const recognitionInstance = new SpeechRecognition();
+        recognitionInstance.lang = 'en-US'
+        recognitionInstance.continuous = true
+        recognitionInstance.interimResults = true
 
-        const synth = window.speechSynthesis;
-        const voices = synth.getVoices();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.voice = voices[1];
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        synth.speak(utterance);
+        recognitionInstance.onspeechstart = () => {
+          console.log('Speech has been detected.');
+        };
+    
+        recognitionInstance.onspeechend = () => {
+          console.log('Speech has stopped.');
+          stopRecording();
+        };
+    
+        recognitionInstance.onresult = (event:any) => {
+          setTranscript(event.results[0][0].transcript);
+          setText(event.results[0][0].transcript)
+        };
+    
+        setRecognition(recognitionInstance);
+    
+        return () => {
+          recognitionInstance.abort();
+        };
+      }, []);
 
-    }
+      const startRecording = () => {
+        setTranscript("")
+        recognition?.start();
+        setIsRecording(true);
+      };
+    
+      const stopRecording = () => {
+        recognition?.stop();
+        setIsRecording(false);
+      };
+    
 
-    let SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition
-    const recognition = new SpeechRecognition()
+    const sendMessage = async (e: React.FormEvent) => {
 
-    const reQuestForApiKey = () => {
-        let apiKey = localStorage.getItem('openAIKey')
+        if(text === "" || isRecording) return
 
-        if(apiKey) return
+        //Get
+        setMessages([...messages, { message: text, sender: "user" }])
+        setText("")
 
-        if(!apiKey){
-            apiKey = prompt("Please enter your OpenAI API Key")  
-            localStorage.setItem('openAIKey', `${apiKey}}`)      
-        }
-    }
-
-    const autoScroll = ()=>{
+        //Scroll to bottom
         boxRef.current?.scrollTo(0, boxRef.current.scrollHeight)
-    }
 
-    useEffect(()=>{
-        reQuestForApiKey()
-        getAPIKey()
-    },[])
+        //Send to GPT-3
 
-    useEffect(()=>{
-        autoScroll()
-    }, [messages])
-
-    const record = () => {
-
-        recognition.lang = 'en-US'
-        recognition.continuous = true
-        recognition.interimResults = true
-
-        setText("")
-        setRecording(true)
-        recognition.start();
-        recognition.onresult = (e: any) => {
-
-            let text = ""
-
-            for (let i = e.resultIndex; i < e.results.length; i++) {
-                text += ` ${e.results[i][0].transcript}`
-                console.log(e.results[i][0].transcript)
-            }
-
-            setText(prev => prev + " " + text)
-        }
-
-    }
-
-    const stopRecording = async () => {
-        await recognition.abort()
-        setRecording(false)
-    }
-
-    const sendMessage = async (e : React.FormEvent) => {
-        e.preventDefault()
-        if(text === "") return
         setLoading(true)
-        setMessages(prev => [...prev, { message: text, sender: "user" }])
-        const responseText = await generateCompletion(text)
-        setText("")
-        if (responseText) {
-            setMessages(prev => [...prev, { message: responseText, sender: "bot" }])
-            speak(responseText)
-            setLoading(false)
-        }
+        const response = await generateCompletion(text)
+        setLoading(false)
+
+        //Get response
+        setMessages([...messages, { message: `${response}`, sender: "bot" }])
+
     }
 
+
+    const speak = (text: string) => {
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = "en-US"
+        window.speechSynthesis.speak(utterance)
+    }
 
     return (
         <div className='w-screen h-screen bg-white flex items-center justify-center'>
@@ -112,7 +97,9 @@ const Home = () => {
 
                     {/* Messages */}
 
-                    <div className="h-[28rem] bg-gray-100 p-2 mb-3 rounded-md overflow-y-scroll" ref={boxRef}>
+                    <div className="">{transcript}</div>
+
+                    <div className="h-[28rem] bg-gray-100 p-2 mb-3 rounded-md overflow-y-scroll scroll-smooth" ref={boxRef}>
                         {messages.map((message, index) => (
                             <div key={index} className={` relative p-2 m-1 mt-3 rounded-lg max-w-[80%] break-words w-fit ${message.sender === "bot" ? "bg-slate-500 border text-white " : "bg-teal-800 mr-0 ml-auto text-white"}`}>{message.message}
 
@@ -131,14 +118,14 @@ const Home = () => {
                     </div>
 
                     <div className="">
-                        <form action="#" onSubmit={(e)=>sendMessage(e)} className='flex w-full gap-2'>
+                        <form action="#" onSubmit={(e) => sendMessage(e)} className='flex w-full gap-2'>
                             <input value={text} onChange={(e) => setText(e.target.value)} type="text" placeholder='type message' className="outline-none w-full border text-gray-600 border-gray-400 p-2 rounded-xl" />
                             <button type='submit' title='send' className='p-3 w-[45px] h-[40px] rounded-lg bg-gray-600'>
                                 {Send}
                             </button>
                             <button title='start recording' className='w-[40px] h-[40px] border-2 rounded-full flex items-center justify-center border-gray-700 p-2 fill-gray-700 border-opacity-70 scale-[.8]'>
-                                {!recording && <div onClick={record} className='w-[40px] h-[40px] flex items-center justify-center'>{MicOn}</div>}
-                                {recording && <div onClick={stopRecording} className="animate-pulse w-3 h-3 bg-red-500 rounded-full"></div>}
+                                {!isRecording && <div onClick={startRecording} className='w-[40px] h-[40px] flex items-center justify-center'>{MicOn}</div>}
+                                {isRecording && <div onClick={stopRecording} className="animate-pulse w-3 h-3 bg-red-500 rounded-full"></div>}
                             </button>
                         </form>
                     </div>
